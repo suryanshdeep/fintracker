@@ -1,0 +1,122 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+
+  // have explicitly defined the generated file location thus have to use this location only for the imports
+  output = "../lib/generated/prisma"
+}
+
+//setting up the url of the db source
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  clerkUserId  String        @unique //clerk user id
+  email        String        @unique
+  name         String? //optional
+  imageUrl     String? //optional 
+  // one to many relations with all the other models
+  transactions Transaction[]
+  accounts     Account[]
+  budgets      Budget[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // defining the name through which we could call our this db
+  @@map("users")
+}
+
+model Account {
+  id           String        @id @default(uuid())
+  name         String
+  type         AccountType
+  balance      Decimal       @default(0) //will ask initial balance while creating an account
+  isDefault    Boolean       @default(false)
+  userId       String //FOREIGN KEY
+  //onDelete: Cascade: If a user is deleted, 
+  //all their related accounts are also deleted automatically.
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // A one-to-many relationship to the Transaction model.
+  //An account can have multiple related transactions
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId]) //Creates a database index on the userId column to speed up queries that filter by userId
+  @@map("accounts")
+}
+
+//defining the values that Account Type can take
+enum AccountType {
+  CURRENT
+  SAVINGS
+}
+
+model Transaction {
+  id                String             @id @default(uuid()) //PRIMARY KEY
+  type              TransactionType
+  amount            Decimal
+  description       String
+  date              DateTime
+  category          String
+  // receipt Url is optional
+  receiptUrl        String?
+  isRecurring       Boolean            @default(false)
+  // recurringInterval optional
+  recurringInterval RecurringInterval? //only used if isRecurring is true
+  //nextRecurringDate- optional
+  nextRecurringDate DateTime? //Next date for recurring transactions
+  //lastRecurringDate -optional
+  lastProcessed     DateTime? //Last time this recurring transaction was processed
+  status            TransactionStatus  @default(COMPLETED)
+  userId            String //FOREIGN KEY
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String //FOREIGN KEY
+  account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("transactions")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum RecurringInterval {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model Budget {
+  id            String    @id @default(uuid()) //PRIMARY KEY
+  amount        Decimal
+  userId        String    @unique //FOREIGN KEY
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastAlertSent DateTime? //Track when the last alert was sent
+  createdAt     DateTime  @default(now())
+  updatedAT     DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("budgets")
+}
